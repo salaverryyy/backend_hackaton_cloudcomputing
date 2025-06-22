@@ -1,0 +1,125 @@
+org: dsalaverryyy
+service: utec-diagram-backend
+
+provider:
+  name: aws
+  runtime: python3.13
+  memorySize: 256  
+  timeout: 30      
+  stage: dev
+  region: us-east-1
+  iam:
+    role: arn:aws:iam::570699102669:role/LabRole  
+
+functions:
+  crearUsuario:
+    handler: handler.crearUsuario
+    memorySize: 512
+    events:
+      - http:
+          path: usuarios
+          method: post
+          cors: true
+          integration: lambda
+
+  loginUsuario:
+    handler: handler.loginUsuario
+    memorySize: 512
+    events:
+      - http:
+          path: login
+          method: post
+          cors: true
+          integration: lambda
+
+  validarTokenAcceso:
+    handler: handler.validarTokenAcceso
+    memorySize: 512
+    events:
+      - http:
+          path: validar-token
+          method: post
+          cors: true
+          integration: lambda
+
+  generarDiagrama:
+    handler: handler.generarDiagrama
+    memorySize: 512
+    events:
+      - http:
+          path: generar-diagrama
+          method: post
+          cors: true
+          integration: lambda
+          
+
+  validarDiagrama:
+    handler: handler.validarDiagrama
+    memorySize: 512
+    events:
+      - http:
+          path: validar-diagrama
+          method: post
+          cors: true
+          integration: lambda
+          
+
+  guardarDiagramaS3:
+    handler: handler.guardarDiagramaS3
+    memorySize: 512
+    events:
+      - http:
+          path: guardar-diagrama
+          method: post
+          cors: true
+          integration: lambda
+          
+
+resources:
+  Resources:
+    t_usuarios:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: t_usuarios
+        AttributeDefinitions:
+          - AttributeName: user_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: user_id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    t_diagramas:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: t_diagramas
+        AttributeDefinitions:
+          - AttributeName: diagram_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: diagram_id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    DiagramaBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: utec-diagramas-bucket-${self:provider.stage}
+
+custom:
+  serverless:
+    org: dsalaverryyy
+    app: utec-diagram-backend
+    region: us-east-1
+
+# Variables de entorno para la función Lambda
+env:
+  DIAGRAM_BUCKET: utec-diagramas-bucket-${self:provider.stage}
+  DIAGRAM_TABLE: t_diagramas
+
+plugins:
+  - serverless-plugin-optimize
