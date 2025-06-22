@@ -2,12 +2,7 @@ import boto3
 import hashlib
 import uuid
 from datetime import datetime, timedelta
-from diagrams import Diagram
-from diagrams.aws.compute import EC2, Lambda
-from io import BytesIO
 import json
-from diagrams.aws.network import VPC
-from datetime import datetime
 
 # Función 1: Crear Usuario
 # Hashear contraseña
@@ -18,97 +13,103 @@ def hash_password(password):
 # Función que maneja el registro de user y validación del password
 def crearUsuario(event, context):
     try:
-        # Obtener el email y el password
-        user_id = event.get('user_id')
-        password = event.get('password')
-        
-        # Verificar que el email y el password existen
-        if user_id and password:
-            # Hashea la contraseña antes de almacenarla
-            hashed_password = hash_password(password)
-            # Conectar DynamoDB
-            dynamodb = boto3.resource('dynamodb')
-            t_usuarios = dynamodb.Table('t_usuarios')
-            # Almacena los datos del user en la tabla de usuarios en DynamoDB
-            t_usuarios.put_item(
-                Item={
-                    'user_id': user_id,
-                    'password': hashed_password,
-                }
-            )
-            # Retornar un código de estado HTTP 200 (OK) y un mensaje de éxito
-            mensaje = {
-                'message': 'User registered successfully',
-                'user_id': user_id
-            }
-            return {
-                'statusCode': 200,
-                'body': mensaje
-            }
+        raw_body = event.get('body')
+        if isinstance(raw_body, str):
+            payload = json.loads(raw_body)
+        elif isinstance(raw_body, dict):
+            payload = raw_body
         else:
-            mensaje = {
-                'error': 'Invalid request body: missing user_id or password'
-            }
+            payload = event
+
+        user_id = payload.get('user_id')
+        password = payload.get('password')
+
+        if not user_id or not password:
             return {
                 'statusCode': 400,
-                'body': mensaje
+                'body': json.dumps({'error': 'Faltan user_id o password'})
             }
 
-    except Exception as e:
-        # Excepción y retornar un código de error HTTP 500
-        print("Exception:", str(e))
-        mensaje = {
-            'error': str(e)
-        }        
+        # 4) Hashear y guardar en DynamoDB
+        hashed = hash_password(password)
+        dynamodb = boto3.resource('dynamodb')
+        tabla = dynamodb.Table('t_usuarios')
+        tabla.put_item(Item={
+            'user_id': user_id,
+            'password': hashed
+        })
+
+        # 5) Responder éxito
         return {
-            'statusCode': 500,
-            'body': mensaje
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Usuario registrado con éxito',
+                'user_id': user_id
+            })
         }
 
+    except Exception as e:
+        print("Error al crear usuario:", e)
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': 'Error interno del servidor'})
+        }
 
 # Función 2: Login de Usuario
 def loginUsuario(event, context):
-    # Entrada (json)
-    user_id = event['user_id']
-    password = event['password']
-    hashed_password = hash_password(password)
-    # Proceso
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('t_usuarios')
-    response = table.get_item(
-        Key={
-            'user_id': user_id
+    # 1) Parsear el payload: str → loads, dict → usar directo
+    raw_body = event.get('body')
+    if isinstance(raw_body, str):
+        payload = json.loads(raw_body)
+    elif isinstance(raw_body, dict):
+        payload = raw_body
+    else:
+        # Por si invocas localmente sin proxy
+        payload = event
+
+    # 2) Extraer campos
+    user_id = payload.get('user_id')
+    password = payload.get('password')
+
+    # 3) Validación básica
+    if not user_id or not password:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': 'Faltan user_id o password'})
         }
-    )
-    if 'Item' not in response:
+
+    # 4) Comprobar en DynamoDB
+    hashed_password = hash_password(password)
+    dynamodb = boto3.resource('dynamodb')
+    usuarios_tabla = dynamodb.Table('t_usuarios')
+    resp = usuarios_tabla.get_item(Key={'user_id': user_id})
+
+    if 'Item' not in resp:
         return {
             'statusCode': 403,
-            'body': 'Usuario no existe'
+            'body': json.dumps({'error': 'Usuario no existe'})
         }
-    else:
-        hashed_password_bd = response['Item']['password']
-        if hashed_password == hashed_password_bd:
-            # Genera token
-            token = str(uuid.uuid4())
-            fecha_hora_exp = datetime.now() + timedelta(minutes=60)
-            registro = {
-                'token': token,
-                'expires': fecha_hora_exp.strftime('%Y-%m-%d %H:%M:%S')
-            }
-            table = dynamodb.Table('t_tokens_acceso')
-            dynamodbResponse = table.put_item(Item = registro)
-        else:
-            return {
-                'statusCode': 403,
-                'body': 'Password incorrecto'
-            }
-    
-    # Salida (json)
+
+    if resp['Item']['password'] != hashed_password:
+        return {
+            'statusCode': 403,
+            'body': json.dumps({'error': 'Password incorrecto'})
+        }
+
+    # 5) Generar token
+    token = str(uuid.uuid4())
+    expires = (datetime.now() + timedelta(minutes=60)).strftime('%Y-%m-%d %H:%M:%S')
+    tokens_tabla = dynamodb.Table('t_tokens_acceso')
+    tokens_tabla.put_item(Item={
+        'token': token,
+        'expires': expires
+    })
+
+    # 6) Devolver token
     return {
         'statusCode': 200,
-        'token': token
+        'body': json.dumps({'token': token})
     }
-
 
 # Función 3: Validar Token de Acceso
 def validarTokenAcceso(event, context):
@@ -135,7 +136,7 @@ def validarTokenAcceso(event, context):
                 'statusCode': 403,
                 'body': 'Token expirado'
             }
-    
+
     # Salida (json)
     return {
         'statusCode': 200,
@@ -145,10 +146,14 @@ def validarTokenAcceso(event, context):
 
 # Función 4: Generar Diagrama
 def generarDiagrama(event, context):
+    from diagrams import Diagram
+    from diagrams.aws.compute import EC2, Lambda
+    from diagrams.aws.network import VPC
+    from io import BytesIO
 
 # Inicio - Proteger el Lambda
     token = event['headers']['Authorization']
-    lambda_client = boto3.client('lambda')    
+    lambda_client = boto3.client('lambda')
     payload_string = '{ "token": "' + token +  '" }'
     invoke_response = lambda_client.invoke(FunctionName="ValidarTokenAcceso",
                                            InvocationType='RequestResponse',
@@ -165,13 +170,13 @@ def generarDiagrama(event, context):
     diagram_code = event['body']['diagram_code']
     diagram_type = event['body'].get('diagram_type', 'aws')  # Tipo de diagrama (por defecto AWS)
     user_id = event['user_id']
-    
+
     if not diagram_code:
         return {
             'statusCode': 400,
             'body': 'Código de diagrama no proporcionado'
         }
-    
+
     # Decodificar el código del diagrama si está en formato JSON
     try:
         diagram_data = json.loads(diagram_code)
@@ -180,7 +185,7 @@ def generarDiagrama(event, context):
             'statusCode': 400,
             'body': 'Código de diagrama en formato incorrecto'
         }
-    
+
     # Generar el diagrama
     with Diagram(f"AWS Diagram for {user_id}", show=False) as diag:
         if diagram_type == 'aws':
@@ -275,7 +280,7 @@ def guardarDiagramaS3(event, context):
 
 # Inicio - Proteger el Lambda
     token = event['headers']['Authorization']
-    lambda_client = boto3.client('lambda')    
+    lambda_client = boto3.client('lambda')
     payload_string = '{ "token": "' + token +  '" }'
     invoke_response = lambda_client.invoke(FunctionName="ValidarTokenAcceso",
                                            InvocationType='RequestResponse',
