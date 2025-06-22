@@ -11,10 +11,16 @@ provider:
   iam:
     role: arn:aws:iam::570699102669:role/LabRole  
 
+layers:
+  graphviz:
+    arn: arn:aws:lambda:us-east-1:553035198032:layer:graphviz:10
+
 functions:
   crearUsuario:
     handler: handler.crearUsuario
     memorySize: 512
+    layers:
+      - ${self:layers.graphviz}
     events:
       - http:
           path: usuarios
@@ -25,6 +31,8 @@ functions:
   loginUsuario:
     handler: handler.loginUsuario
     memorySize: 512
+    layers:
+      - ${self:layers.graphviz}
     events:
       - http:
           path: login
@@ -35,6 +43,8 @@ functions:
   validarTokenAcceso:
     handler: handler.validarTokenAcceso
     memorySize: 512
+    layers:
+      - ${self:layers.graphviz}
     events:
       - http:
           path: validar-token
@@ -45,32 +55,35 @@ functions:
   generarDiagrama:
     handler: handler.generarDiagrama
     memorySize: 512
+    layers:
+      - ${self:layers.graphviz}
     events:
       - http:
           path: generar-diagrama
           method: post
           cors: true
           integration: lambda
-          
 
   validarDiagrama:
     handler: handler.validarDiagrama
     memorySize: 512
+    layers:
+      - ${self:layers.graphviz}
     events:
       - http:
           path: validar-diagrama
           method: post
           cors: true
           integration: lambda
-          
 
   guardarDiagramaS3:
     handler: handler.guardarDiagramaS3
     memorySize: 512
+    layers:
+      - ${self:layers.graphviz}
     events:
       - http:
           path: guardar-diagrama
           method: post
           cors: true
           integration: lambda
-          
