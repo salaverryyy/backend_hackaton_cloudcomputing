@@ -4,23 +4,19 @@ service: utec-diagram-backend
 provider:
   name: aws
   runtime: python3.13
-  memorySize: 256  
-  timeout: 30      
+  memorySize: 256
+  timeout: 30
   stage: dev
   region: us-east-1
   iam:
-    role: arn:aws:iam::570699102669:role/LabRole  
-
-layers:
-  graphviz:
-    arn: arn:aws:lambda:us-east-1:553035198032:layer:graphviz:10
+    role: arn:aws:iam::570699102669:role/LabRole
+  layers:
+    - arn:aws:lambda:us-east-1:553035198032:layer:graphviz:10
 
 functions:
   crearUsuario:
     handler: handler.crearUsuario
     memorySize: 512
-    layers:
-      - ${self:layers.graphviz}
     events:
       - http:
           path: usuarios
@@ -31,8 +27,6 @@ functions:
   loginUsuario:
     handler: handler.loginUsuario
     memorySize: 512
-    layers:
-      - ${self:layers.graphviz}
     events:
       - http:
           path: login
@@ -43,8 +37,6 @@ functions:
   validarTokenAcceso:
     handler: handler.validarTokenAcceso
     memorySize: 512
-    layers:
-      - ${self:layers.graphviz}
     events:
       - http:
           path: validar-token
@@ -55,8 +47,6 @@ functions:
   generarDiagrama:
     handler: handler.generarDiagrama
     memorySize: 512
-    layers:
-      - ${self:layers.graphviz}
     events:
       - http:
           path: generar-diagrama
@@ -67,8 +57,6 @@ functions:
   validarDiagrama:
     handler: handler.validarDiagrama
     memorySize: 512
-    layers:
-      - ${self:layers.graphviz}
     events:
       - http:
           path: validar-diagrama
@@ -79,8 +67,6 @@ functions:
   guardarDiagramaS3:
     handler: handler.guardarDiagramaS3
     memorySize: 512
-    layers:
-      - ${self:layers.graphviz}
     events:
       - http:
           path: guardar-diagrama
