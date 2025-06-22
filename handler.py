@@ -150,6 +150,7 @@ def generarDiagrama(event, context):
     from diagrams.aws.compute import EC2, Lambda
     from diagrams.aws.network import VPC
     from io import BytesIO
+    import os
 
     # Proteger el Lambda
     token = event['headers']['Authorization']
@@ -193,8 +194,11 @@ def generarDiagrama(event, context):
             'body': 'Código de diagrama en formato incorrecto'
         }
 
-    # Generar el diagrama
-    with Diagram(f"AWS Diagram for {user_id}", show=False) as diag:
+    # --------- CAMBIO CLAVE: usar /tmp/ ---------
+    output_path = f"/tmp/aws_diagram_for_{user_id}"
+
+    # Generar el diagrama en /tmp/
+    with Diagram(f"AWS Diagram for {user_id}", show=False, outformat="png", filename=output_path) as diag:
         if diagram_type == 'aws':
             EC2("EC2 Instance")
             Lambda("Lambda Function")
