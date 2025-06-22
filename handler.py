@@ -1,9 +1,12 @@
 import boto3
 import hashlib
+import os
 import uuid
 from datetime import datetime, timedelta
 import json
 
+
+os.environ["PATH"] += os.pathsep + "/opt/bin"
 # Función 1: Crear Usuario
 # Hashear contraseña
 def hash_password(password):
