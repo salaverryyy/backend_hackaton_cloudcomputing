@@ -148,35 +148,32 @@ def validarTokenAcceso(event, context):
 
 
 # Función 4: Generar Diagrama
+# Función 4: Generar Diagrama
 def generarDiagrama(event, context):
     from diagrams import Diagram
     from diagrams.aws.compute import EC2, Lambda
     from diagrams.aws.network import VPC
-    from io import BytesIO
-    import os
-
+    
     # Proteger el Lambda
     token = event['headers']['Authorization']
     lambda_client = boto3.client('lambda')
-    payload_string = '{ "token": "' + token +  '" }'
-    invoke_response = lambda_client.invoke(FunctionName="ValidarTokenAcceso",
+    payload_string = json.dumps({ "token": token })
+    invoke_response = lambda_client.invoke(FunctionName="validarTokenAcceso",
                                            InvocationType='RequestResponse',
                                            Payload = payload_string)
     response = json.loads(invoke_response['Payload'].read())
-    if response['statusCode'] == 403:
+    if response.get('statusCode') != 200:
         return {
             'statusCode' : 403,
-            'status' : 'Forbidden - Acceso No Autorizado'
+            'body' : json.dumps({'error': 'Forbidden - Acceso No Autorizado'})
         }
 
     # EXTRAER EL BODY CORRECTAMENTE
     raw_body = event.get('body')
     if isinstance(raw_body, str):
         payload = json.loads(raw_body)
-    elif isinstance(raw_body, dict):
-        payload = raw_body
     else:
-        payload = event
+        payload = raw_body
 
     diagram_code = payload.get('diagram_code')
     diagram_type = payload.get('diagram_type', 'aws')
@@ -185,23 +182,24 @@ def generarDiagrama(event, context):
     if not diagram_code:
         return {
             'statusCode': 400,
-            'body': 'Código de diagrama no proporcionado'
+            'body': json.dumps({'error': 'Código de diagrama no proporcionado'})
         }
 
     # Decodificar el código del diagrama si está en formato JSON
     try:
-        diagram_data = json.loads(diagram_code)
+        json.loads(diagram_code)
     except json.JSONDecodeError:
         return {
             'statusCode': 400,
-            'body': 'Código de diagrama en formato incorrecto'
+            'body': json.dumps({'error': 'Código de diagrama en formato incorrecto'})
         }
 
-    # --------- CAMBIO CLAVE: usar /tmp/ ---------
-    output_path = f"/tmp/aws_diagram_for_{user_id}"
+    # --- CAMBIO CLAVE: usar /tmp/ ---
+    # La librería añade la extensión .png automáticamente al nombre de archivo
+    output_filename = f"/tmp/aws_diagram_for_{user_id}"
 
     # Generar el diagrama en /tmp/
-    with Diagram(f"AWS Diagram for {user_id}", show=False, outformat="png", filename=output_path) as diag:
+    with Diagram(f"AWS Diagram for {user_id}", show=False, filename=output_filename, outformat="png") as diag:
         if diagram_type == 'aws':
             EC2("EC2 Instance")
             Lambda("Lambda Function")
@@ -213,57 +211,65 @@ def generarDiagrama(event, context):
         else:
             return {
                 'statusCode': 400,
-                'body': 'Tipo de diagrama no soportado'
+                'body': json.dumps({'error': 'Tipo de diagrama no soportado'})
             }
 
-    img_stream = BytesIO()
-    diag.render(img_stream, format="png")
-    img_stream.seek(0)
-
+    # --- CAMBIO CLAVE: Leer el archivo desde /tmp para subirlo a S3 ---
     s3_client = boto3.client('s3')
-    bucket_name = event['env']['DIAGRAM_BUCKET']
+    bucket_name = os.environ.get('DIAGRAM_BUCKET')
     s3_key = f"diagrams/{user_id}/{uuid.uuid4()}.png"
 
-    s3_client.put_object(Bucket=bucket_name, Key=s3_key, Body=img_stream)
+    try:
+        # El nombre completo del archivo generado es output_filename + ".png"
+        with open(f"{output_filename}.png", "rb") as f:
+            s3_client.upload_fileobj(f, bucket_name, s3_key)
+    except FileNotFoundError:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': 'No se pudo generar el archivo del diagrama en /tmp'})
+        }
+    
+    s3_url = f"https://{bucket_name}.s3.amazonaws.com/{s3_key}"
 
     return {
         'statusCode': 200,
-        'message': 'Diagrama generado y guardado en S3',
-        's3_url': f"https://{bucket_name}.s3.amazonaws.com/{s3_key}"
+        'body': json.dumps({
+            'message': 'Diagrama generado y guardado en S3',
+            's3_url': s3_url
+        })
     }
 
 
+# Función 5: Validar Diagrama
 # Función 5: Validar Diagrama
 def validarDiagrama(event, context):
     # Proteger el Lambda
     token = event['headers']['Authorization']
     lambda_client = boto3.client('lambda')    
-    payload_string = '{ "token": "' + token +  '" }'
-    invoke_response = lambda_client.invoke(FunctionName="ValidarTokenAcceso",
+    payload_string = json.dumps({ "token": token })
+    invoke_response = lambda_client.invoke(FunctionName="validarTokenAcceso",
                                            InvocationType='RequestResponse',
                                            Payload = payload_string)
     response = json.loads(invoke_response['Payload'].read())
-    if response['statusCode'] == 403:
+    if response.get('statusCode') != 200:
         return {
             'statusCode' : 403,
-            'status' : 'Forbidden - Acceso No Autorizado'
+            'body' : json.dumps({'error': 'Forbidden - Acceso No Autorizado'})
         }
 
     # EXTRAER EL BODY CORRECTAMENTE
     raw_body = event.get('body')
     if isinstance(raw_body, str):
         payload = json.loads(raw_body)
-    elif isinstance(raw_body, dict):
-        payload = raw_body
     else:
-        payload = event
+        payload = raw_body
 
     diagram_code = payload.get('diagram_code')
 
     if not diagram_code:
         return {
             'statusCode': 400,
-            'body': 'Código del diagrama vacío'
+            'body': json.dumps({'error': 'Código del diagrama vacío'})
         }
 
     try:
@@ -271,56 +277,62 @@ def validarDiagrama(event, context):
     except json.JSONDecodeError:
         return {
             'statusCode': 400,
-            'body': 'Código del diagrama en formato incorrecto'
+            'body': json.dumps({'error': 'Código del diagrama en formato incorrecto'})
         }
 
     if 'EC2' not in diagram_data:
         return {
             'statusCode': 400,
-            'body': 'Falta un recurso EC2 en el diagrama'
+            'body': json.dumps({'error': 'Falta un recurso EC2 en el diagrama'})
         }
 
     return {
         'statusCode': 200,
-        'body': 'Diagrama válido'
+        'body': json.dumps({'message': 'Diagrama válido'})
     }
 
+# Función 6: Guardar Diagrama en S3
 # Función 6: Guardar Diagrama en S3
 def guardarDiagramaS3(event, context):
     # Proteger el Lambda
     token = event['headers']['Authorization']
     lambda_client = boto3.client('lambda')
-    payload_string = '{ "token": "' + token +  '" }'
-    invoke_response = lambda_client.invoke(FunctionName="ValidarTokenAcceso",
+    payload_string = json.dumps({ "token": token })
+    invoke_response = lambda_client.invoke(FunctionName="validarTokenAcceso",
                                            InvocationType='RequestResponse',
                                            Payload = payload_string)
     response = json.loads(invoke_response['Payload'].read())
-    if response['statusCode'] == 403:
+    if response.get('statusCode') != 200:
         return {
             'statusCode' : 403,
-            'status' : 'Forbidden - Acceso No Autorizado'
+            'body' : json.dumps({'error': 'Forbidden - Acceso No Autorizado'})
         }
 
     # EXTRAER EL BODY CORRECTAMENTE
     raw_body = event.get('body')
     if isinstance(raw_body, str):
         payload = json.loads(raw_body)
-    elif isinstance(raw_body, dict):
-        payload = raw_body
     else:
-        payload = event
+        payload = raw_body
 
     diagram_code = payload.get('diagram_code')
     user_id = payload.get('user_id')
+    
+    if not diagram_code or not user_id:
+        return {'statusCode': 400, 'body': json.dumps({'error': 'Faltan diagram_code o user_id'})}
 
     s3_client = boto3.client('s3')
-    bucket_name = event['env']['DIAGRAM_BUCKET']
+    bucket_name = os.environ.get('DIAGRAM_BUCKET')
     s3_key = f"diagrams/{user_id}/{uuid.uuid4()}.txt"
 
     s3_client.put_object(Bucket=bucket_name, Key=s3_key, Body=diagram_code)
+    
+    s3_url = f"https://{bucket_name}.s3.amazonaws.com/{s3_key}"
 
     return {
         'statusCode': 200,
-        'message': 'Código del diagrama guardado en S3',
-        's3_url': f"https://{bucket_name}.s3.amazonaws.com/{s3_key}"
+        'body': json.dumps({
+            'message': 'Código del diagrama guardado en S3',
+            's3_url': s3_url
+        })
     }
