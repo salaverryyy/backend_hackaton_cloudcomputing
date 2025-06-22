@@ -1,4 +1,4 @@
-org: dsalaverryyy
+org: armandopal
 service: utec-diagram-backend
 
 provider:
@@ -9,9 +9,9 @@ provider:
   stage: dev
   region: us-east-1
   iam:
-    role: arn:aws:iam::570699102669:role/LabRole
+    role: arn:aws:iam::634482803751:role/LabRole
   layers:
-    - arn:aws:lambda:us-east-1:553035198032:layer:graphviz:10
+  - arn:aws:lambda:us-east-1:634482803751:layer:graphviz-python313:1
 
 functions:
   crearUsuario:
