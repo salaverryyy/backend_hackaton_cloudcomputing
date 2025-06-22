@@ -151,7 +151,7 @@ def generarDiagrama(event, context):
     from diagrams.aws.network import VPC
     from io import BytesIO
 
-# Inicio - Proteger el Lambda
+    # Proteger el Lambda
     token = event['headers']['Authorization']
     lambda_client = boto3.client('lambda')
     payload_string = '{ "token": "' + token +  '" }'
@@ -159,17 +159,24 @@ def generarDiagrama(event, context):
                                            InvocationType='RequestResponse',
                                            Payload = payload_string)
     response = json.loads(invoke_response['Payload'].read())
-    print(response)
     if response['statusCode'] == 403:
         return {
             'statusCode' : 403,
             'status' : 'Forbidden - Acceso No Autorizado'
         }
-    # Fin - Proteger el Lambda 
 
-    diagram_code = event['body']['diagram_code']
-    diagram_type = event['body'].get('diagram_type', 'aws')  # Tipo de diagrama (por defecto AWS)
-    user_id = event['user_id']
+    # EXTRAER EL BODY CORRECTAMENTE
+    raw_body = event.get('body')
+    if isinstance(raw_body, str):
+        payload = json.loads(raw_body)
+    elif isinstance(raw_body, dict):
+        payload = raw_body
+    else:
+        payload = event
+
+    diagram_code = payload.get('diagram_code')
+    diagram_type = payload.get('diagram_type', 'aws')
+    user_id = payload.get('user_id')
 
     if not diagram_code:
         return {
@@ -189,15 +196,12 @@ def generarDiagrama(event, context):
     # Generar el diagrama
     with Diagram(f"AWS Diagram for {user_id}", show=False) as diag:
         if diagram_type == 'aws':
-            # Ejemplo: Diagrama de AWS con EC2 y Lambda
             EC2("EC2 Instance")
             Lambda("Lambda Function")
             VPC("VPC Network")
         elif diagram_type == 'er':
-            # Si es un diagrama ER, podemos agregar lógica para generar un diagrama ER (con ERAlchemy)
             pass
         elif diagram_type == 'mermaid':
-            # Lógica para generar diagrama con Mermaid (opcional)
             pass
         else:
             return {
@@ -205,12 +209,10 @@ def generarDiagrama(event, context):
                 'body': 'Tipo de diagrama no soportado'
             }
 
-    # Guardar el diagrama como imagen en formato PNG
     img_stream = BytesIO()
     diag.render(img_stream, format="png")
     img_stream.seek(0)
 
-    # Subir la imagen a S3
     s3_client = boto3.client('s3')
     bucket_name = event['env']['DIAGRAM_BUCKET']
     s3_key = f"diagrams/{user_id}/{uuid.uuid4()}.png"
@@ -226,8 +228,7 @@ def generarDiagrama(event, context):
 
 # Función 5: Validar Diagrama
 def validarDiagrama(event, context):
-
-# Inicio - Proteger el Lambda
+    # Proteger el Lambda
     token = event['headers']['Authorization']
     lambda_client = boto3.client('lambda')    
     payload_string = '{ "token": "' + token +  '" }'
@@ -235,15 +236,22 @@ def validarDiagrama(event, context):
                                            InvocationType='RequestResponse',
                                            Payload = payload_string)
     response = json.loads(invoke_response['Payload'].read())
-    print(response)
     if response['statusCode'] == 403:
         return {
             'statusCode' : 403,
             'status' : 'Forbidden - Acceso No Autorizado'
         }
-    # Fin - Proteger el Lambda 
 
-    diagram_code = event['body']['diagram_code']
+    # EXTRAER EL BODY CORRECTAMENTE
+    raw_body = event.get('body')
+    if isinstance(raw_body, str):
+        payload = json.loads(raw_body)
+    elif isinstance(raw_body, dict):
+        payload = raw_body
+    else:
+        payload = event
+
+    diagram_code = payload.get('diagram_code')
 
     if not diagram_code:
         return {
@@ -252,7 +260,6 @@ def validarDiagrama(event, context):
         }
 
     try:
-        # Intentar cargar el código como JSON
         diagram_data = json.loads(diagram_code)
     except json.JSONDecodeError:
         return {
@@ -260,25 +267,20 @@ def validarDiagrama(event, context):
             'body': 'Código del diagrama en formato incorrecto'
         }
 
-    # Validar los datos (Ejemplo para un diagrama de AWS)
     if 'EC2' not in diagram_data:
         return {
             'statusCode': 400,
             'body': 'Falta un recurso EC2 en el diagrama'
         }
 
-    # Si todo está bien, retornar éxito
     return {
         'statusCode': 200,
         'body': 'Diagrama válido'
     }
 
-
-
 # Función 6: Guardar Diagrama en S3
 def guardarDiagramaS3(event, context):
-
-# Inicio - Proteger el Lambda
+    # Proteger el Lambda
     token = event['headers']['Authorization']
     lambda_client = boto3.client('lambda')
     payload_string = '{ "token": "' + token +  '" }'
@@ -286,20 +288,28 @@ def guardarDiagramaS3(event, context):
                                            InvocationType='RequestResponse',
                                            Payload = payload_string)
     response = json.loads(invoke_response['Payload'].read())
-    print(response)
     if response['statusCode'] == 403:
         return {
             'statusCode' : 403,
             'status' : 'Forbidden - Acceso No Autorizado'
         }
-    # Fin - Proteger el Lambda 
 
-    diagram_code = event['body']['diagram_code']
+    # EXTRAER EL BODY CORRECTAMENTE
+    raw_body = event.get('body')
+    if isinstance(raw_body, str):
+        payload = json.loads(raw_body)
+    elif isinstance(raw_body, dict):
+        payload = raw_body
+    else:
+        payload = event
+
+    diagram_code = payload.get('diagram_code')
+    user_id = payload.get('user_id')
+
     s3_client = boto3.client('s3')
     bucket_name = event['env']['DIAGRAM_BUCKET']
-    s3_key = f"diagrams/{event['user_id']}/{uuid.uuid4()}.txt"  # Usar UUID para el archivo
+    s3_key = f"diagrams/{user_id}/{uuid.uuid4()}.txt"
 
-    # Guardar el código como archivo de texto en S3
     s3_client.put_object(Bucket=bucket_name, Key=s3_key, Body=diagram_code)
 
     return {
