@@ -19,7 +19,8 @@ package:
     - 'bin/**'
     - 'lib/**'
     - 'diagrams/**'
-    - 'graphviz/**'
+    - 'boto3/**'
+    - 'botocore/**'
 
 functions:
   crearUsuario:

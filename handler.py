@@ -1,12 +1,12 @@
 import boto3
 import hashlib
+import sys
 import os
 import uuid
 from datetime import datetime, timedelta
 import json
 
 
-os.environ["LD_LIBRARY_PATH"] = os.path.join(os.getcwd(), "lib")
 os.environ["PATH"] = os.path.join(os.getcwd(), "bin") + os.pathsep + os.environ.get("PATH", "")
 sys.path.append(os.getcwd())
 # Función 1: Crear Usuario
