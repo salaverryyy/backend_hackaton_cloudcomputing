@@ -10,6 +10,7 @@ provider:
   region: us-east-1
   iam:
     role: arn:aws:iam::634482803751:role/LabRole
+  architecture: x86_64
 
 package:
   patterns:
