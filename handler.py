@@ -7,6 +7,7 @@ import json
 
 
 os.environ["PATH"] += os.pathsep + "/opt/bin"
+os.environ["LD_LIBRARY_PATH"] = "/opt/lib:" + os.environ.get("LD_LIBRARY_PATH", "")
 # Función 1: Crear Usuario
 # Hashear contraseña
 def hash_password(password):
