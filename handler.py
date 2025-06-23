@@ -5,9 +5,9 @@ import uuid
 from datetime import datetime, timedelta
 import json
 
-
-os.environ["PATH"] += os.pathsep + "/opt/bin"
-os.environ["LD_LIBRARY_PATH"] = "/opt/lib:" + os.environ.get("LD_LIBRARY_PATH", "")
+os.environ["LD_LIBRARY_PATH"] = os.path.join(os.getcwd(), "lib")
+os.environ["PATH"] = os.path.join(os.getcwd(), "bin") + os.pathsep + os.environ.get("PATH", "")
+sys.path.append(os.getcwd())
 # Función 1: Crear Usuario
 # Hashear contraseña
 def hash_password(password):
